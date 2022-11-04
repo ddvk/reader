@@ -1,17 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
@@ -31,53 +26,108 @@ func sw(x int) int {
 	return 1
 }
 
-func parserUUID(buffer []byte) error {
-	logrus.Println("UUID map")
-	log.Println(hex.EncodeToString(buffer))
-	decoder := NewDecoder(bytes.NewReader(buffer))
-	count, err := decoder.GetByte()
-	if err != nil {
-		return err
+type Index uint16
+type UUIDMap struct {
+	UUID2Index map[uuid.UUID]Index
+	Index2UUID map[Index]uuid.UUID
+}
+
+func NewMap() UUIDMap {
+	return UUIDMap{
+		UUID2Index: make(map[uuid.UUID]Index),
+		Index2UUID: make(map[Index]uuid.UUID),
 	}
-	logrus.Println("count uuids: ", count)
-	uva, err := decoder.GetBytes(5)
-	if err != nil {
-		return err
+}
+
+func (um *UUIDMap) Entries() int {
+	return len(um.Index2UUID)
+}
+
+func (um *UUIDMap) Add(u uuid.UUID, index Index) {
+	if um.Index2UUID == nil {
+		um.Index2UUID = make(map[Index]uuid.UUID)
 	}
-	logrus.Println("unknown: ", hex.EncodeToString(uva))
-	uuidLen, err := decoder.GetByte()
-	if err != nil {
-		return err
+	if um.UUID2Index == nil {
+		um.UUID2Index = make(map[uuid.UUID]Index)
 	}
-	uuidBytes, err := decoder.GetBytes(int(uuidLen))
+	um.Index2UUID[index] = u
+	um.UUID2Index[u] = index
+}
+
+func parserUUID(decoder *ChunkDecoder) (uuidMap UUIDMap, err error) {
+	count, err := decoder.GetVarUInt32()
 	if err != nil {
-		return err
+		return
 	}
-	myUuid, err := uuid.FromBytes(uuidBytes)
-	if err != nil {
-		return err
+	log.Info("count uuids: ", count)
+	var elementLength uint32
+	for i := 0; i < int(count); i++ {
+		_, err = decoder.checkTag(-1, ItemTag)
+		if err != nil {
+			return
+		}
+
+		elementLength, err = decoder.GetUInt32()
+		if err != nil {
+			return
+		}
+		log.Info("got length: ", elementLength)
+		var uuidLen uint32
+		uuidLen, err = decoder.GetVarUInt32()
+		if err != nil {
+			return
+		}
+		if uuidLen != 16 {
+			err = fmt.Errorf("uuid length != 16")
+			return
+		}
+		var buffer []byte
+		buffer, err = decoder.GetBytes(int(uuidLen))
+		if err != nil {
+			return
+		}
+
+		var u uuid.UUID
+		u, err = uuid.FromBytes(buffer)
+		if err != nil {
+			return
+		}
+		var index uint16
+		index, err = decoder.GetShort()
+		if err != nil {
+			return
+		}
+		uuidMap.Add(u, Index(index))
 	}
-	id, err := decoder.GetShort()
-	if err != nil {
-		return err
-	}
-	log.Println("uid: ", myUuid.String(), " index: ", id)
-	return nil
+	log.Info("Got a map: ", uuidMap.Entries())
+	return
 }
 
 var ErrTagMismatch = errors.New("tag mismatch")
 var ErrIndexMismatch = errors.New("index mismatch")
 
-func parseMigrationInfo(buffer []byte) error {
-	decoder := NewDecoder(bytes.NewReader(buffer))
+type MigrationInfo struct {
+	MigrationId CrdtId
+	IsDevice    bool
+	Bob         []byte
+}
+
+func parseMigrationInfo(decoder *ChunkDecoder) (migrationInfo MigrationInfo, err error) {
 	//migrationId?
 	///device?
-	crdtId, _, err := decoder.ExtractCrdtId(1)
+	migrationInfo.MigrationId, _, err = decoder.ExtractCrdtId(1)
 	if err != nil {
-		return err
+		return
 	}
-	fmt.Printf(">> Tree CrdtId id: %x \n", crdtId)
-	return nil
+	migrationInfo.IsDevice, _, err = decoder.ExtractBool(2)
+	if err != nil {
+		return
+	}
+	migrationInfo.Bob, err = decoder.ExtractBob()
+	if err != nil {
+		return
+	}
+	return
 }
 
 type CrdtId uint64
@@ -89,69 +139,6 @@ type TreeNodeInfo struct {
 
 func readCrdt() {
 
-}
-
-func readSceneNode(buffer []byte) error {
-	decoder := NewDecoder(bytes.NewReader(buffer))
-	crdt, _, err := decoder.ExtractCrdtId(1)
-	if err != nil {
-		return err
-	}
-	lww, _, err := decoder.ExtractLwwString(2)
-	if err != nil {
-		return err
-	}
-
-	lwb, _, err := decoder.ExtractLwwBool(3)
-	if err != nil {
-		return err
-	}
-	log.Print("bool")
-
-	crdt2, found, err := decoder.ExtractCrdtId(4)
-	if err != nil {
-		//read 5,6
-		//char
-		//float
-		return fmt.Errorf("no crdtid %v", err)
-	}
-	if found {
-
-	} else {
-		var lwc LwwCrdt
-		var lwb LwwByte
-		var lwfx LwwFloat
-		var lwfy LwwFloat
-		lwc, _, err = decoder.ExtractLwwCrdt(7)
-		if err != nil {
-			return fmt.Errorf("no lww, %v", err)
-		}
-		log.Print(lwc)
-		lwb, _, err = decoder.ExtractLwwByte(8)
-		if err != nil {
-			return err
-		}
-		log.Print(lwb)
-
-		lwfx, _, err = decoder.ExtractLwwFloat(9)
-		if err != nil {
-			return err
-		}
-
-		lwfy, _, err = decoder.ExtractLwwFloat(10)
-		if err != nil {
-			return err
-		}
-		logrus.Print("float x:", lwfx.Value, " y:", lwfy.Value)
-
-	}
-	log.Print("Crd2:", crdt2, lww, lwb, crdt)
-
-	//crdtid
-	//crdtid
-	//bool
-	//TreeNode::Info
-	return nil
 }
 
 type PageInfo struct {
@@ -167,119 +154,26 @@ func (p PageInfo) String() string {
 
 }
 
-func parsePageStuff(buffer []byte) (err error) {
-	decoder := NewDecoder(bytes.NewReader(buffer))
-	pageInfo := PageInfo{}
+func readPageInfo(decoder *ChunkDecoder) (pageInfo PageInfo, err error) {
 	pageInfo.Loads, _, err = decoder.ExtractInt(1)
 	if err != nil {
-		return err
+		return
 	}
 	pageInfo.Merges, _, err = decoder.ExtractInt(2)
 	if err != nil {
-		return err
+		return
 	}
 	pageInfo.TextChars, _, err = decoder.ExtractInt(3)
 	if err != nil {
-		return err
+		return
 	}
 	pageInfo.TextLinex, _, err = decoder.ExtractInt(4)
 	if err != nil {
-		return err
+		return
 	}
-	//todo: load the reset in bob
+	//todo: load the rest in bob
 
-	log.Println("Loads: ", pageInfo)
-	return nil
-}
-
-//readscene: crdt control = 2
-func interpret(header Header, buffer []byte) error {
-	tag := header.TagID
-
-	switch tag {
-	case 0:
-		return parseMigrationInfo(buffer)
-	case 9:
-		return parserUUID(buffer)
-	case 10:
-		return parsePageStuff(buffer)
-	case 2:
-		log.Printf("tag: %d\tb1: %d\tb2: %d\n", tag, header.B1, header.B2)
-		log.Printf("> %s\n", hex.EncodeToString(buffer))
-		return readSceneNode(buffer)
-
-	}
-	return nil
-}
-
-type Chunk struct {
-	Size   int32
-	Header Header
-}
-
-func ExtractChunk(reader io.Reader, index int) (*Chunk, error) {
-	var size int32
-	err := binary.Read(reader, binary.LittleEndian, &size)
-	log.Printf("- length: %d (0x%x), pos: 0x%x\n", size, size, index)
-	if err != nil {
-		return nil, err
-	}
-	index += 4
-	buffer := make([]byte, 4)
-	// var tag uint32
-	_, err = io.ReadFull(reader, buffer[:4])
-	if err != nil {
-		return nil, err
-	}
-
-	// b1 := tag >> 0x10 & 0xF
-	// b2 := tag >> 0x8 & 0xF
-	header := Header{
-		TagID: buffer[3],
-		B1:    buffer[2],
-		B2:    buffer[1],
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	result := &Chunk{
-		Size:   size,
-		Header: header,
-	}
-	return result, nil
-}
-
-func parse(file io.ReadSeekCloser) (err error) {
-	headerLength := 0x2b
-	buffer := make([]byte, headerLength)
-	_, err = io.ReadFull(file, buffer)
-	if err != nil {
-		return err
-	}
-	pos64, err1 := file.Seek(0, io.SeekCurrent)
-	if err1 != nil {
-		return err1
-	}
-	pos := int(pos64)
-	var chunk *Chunk
-	for {
-		chunk, err = ExtractChunk(file, pos)
-		if err != nil {
-			return err
-		}
-
-		buffer = make([]byte, chunk.Size)
-		_, err = io.ReadFull(file, buffer)
-		if err != nil {
-			return
-		}
-		err = interpret(chunk.Header, buffer)
-		if err != nil {
-			return err
-		}
-	}
-
+	log.Info("Loads: ", pageInfo)
 	return
 }
 
@@ -299,13 +193,18 @@ func _main() error {
 }
 
 func main() {
+	go func() {
+
+	}()
 	prefixed := &prefixed.TextFormatter{
-		DisableColors:   true,
+		DisableColors:   false,
 		TimestampFormat: "2006-01-02 15:04:05",
 		FullTimestamp:   true,
 		ForceFormatting: true,
 	}
-	logrus.SetFormatter(prefixed)
+	log.SetFormatter(prefixed)
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.TraceLevel)
 	err := _main()
 	if err != nil {
 		log.Fatal(err)

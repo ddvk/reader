@@ -4,46 +4,35 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
-
-func blah[K any, V any](k K, v V) {
-
-}
 
 type Lww[T any] struct {
 	Value     T
 	Timestamp CrdtId
-	Flag      bool
 }
 
 type LwwBool struct {
 	Value     bool
 	Timestamp CrdtId
-	Flag      bool
 }
 type LwwString struct {
 	Value     string
 	Timestamp CrdtId
-	Flag      bool
 }
 
 type LwwCrdt struct {
 	Value     CrdtId
 	Timestamp CrdtId
-	Flag      bool
 }
 type LwwByte struct {
 	Value     byte
 	Timestamp CrdtId
-	Flag      bool
 }
 type LwwFloat struct {
 	Value     float32
 	Timestamp CrdtId
-	Flag      bool
 }
 
 // func ExtractLwwAny[T any](control byte) (result Lww[T], found bool, err error) {
@@ -55,12 +44,12 @@ type LwwFloat struct {
 // 	}
 // 	return Lww[T]{}, false, nil
 // }
-func (decoder *Decoder) ExtractLwwByte(control byte) (result LwwByte, found bool, err error) {
+func (decoder *ChunkDecoder) ExtractLwwByte(control TagIndex) (result LwwByte, found bool, err error) {
 	result = LwwByte{}
 	if found, err = decoder.checkTag(control, ItemTag); !found {
 		return
 	}
-	_, err = decoder.GetInt()
+	_, err = decoder.GetUInt32()
 	if err != nil {
 		return
 	}
@@ -76,12 +65,12 @@ func (decoder *Decoder) ExtractLwwByte(control byte) (result LwwByte, found bool
 	result.Timestamp = timestamp
 	return
 }
-func (decoder *Decoder) ExtractLwwFloat(control byte) (result LwwFloat, found bool, err error) {
+func (decoder *ChunkDecoder) ExtractLwwFloat(control TagIndex) (result LwwFloat, found bool, err error) {
 	result = LwwFloat{}
 	if found, err = decoder.checkTag(control, ItemTag); !found {
 		return
 	}
-	_, err = decoder.GetInt()
+	_, err = decoder.GetUInt32()
 	if err != nil {
 		return
 	}
@@ -94,21 +83,22 @@ func (decoder *Decoder) ExtractLwwFloat(control byte) (result LwwFloat, found bo
 		return
 	}
 
-	result.Timestamp = timestamp
 	result.Value = val
+	result.Timestamp = timestamp
 
 	return
 }
-func (decoder *Decoder) ExtractLwwCrdt(control byte) (result LwwCrdt, found bool, err error) {
+func (decoder *ChunkDecoder) ExtractLwwCrdt(control TagIndex) (result LwwCrdt, found bool, err error) {
 	result = LwwCrdt{}
 	if found, err = decoder.checkTag(control, ItemTag); !found {
 		return
 	}
-	length, err := decoder.GetInt()
+	someInt, err := decoder.GetUInt32()
 	if err != nil {
 		return
 	}
-	logrus.Print("lwwcrd len: ", length)
+	pos := decoder.Pos()
+	log.Printf("LwCrdt, Int?: %d, pos:%d, max:%d", someInt, pos, decoder.max)
 	val, _, err := decoder.ExtractCrdtId(1)
 	if err != nil {
 		return
@@ -121,20 +111,18 @@ func (decoder *Decoder) ExtractLwwCrdt(control byte) (result LwwCrdt, found bool
 	result.Timestamp = timeStamp
 	return
 }
-func (decoder *Decoder) ExtractLwwBool(control byte) (result LwwBool, found bool, err error) {
+func (decoder *ChunkDecoder) ExtractLwwBool(control TagIndex) (result LwwBool, found bool, err error) {
 	result = LwwBool{}
 	if found, err = decoder.checkTag(control, ItemTag); !found {
 		return
 	}
 
-	totalBytes, err := decoder.GetInt()
+	someInt, err := decoder.GetUInt32()
 	if err != nil {
 		return
 	}
-	logrus.Println("lwwbool, totalbytes:", totalBytes)
-	if totalBytes == 0 {
-		return
-	}
+	log.Info("lwwbool, someInt:", someInt)
+
 	timeStamp, _, err := decoder.ExtractCrdtId(1)
 	if err != nil {
 		return
@@ -143,44 +131,56 @@ func (decoder *Decoder) ExtractLwwBool(control byte) (result LwwBool, found bool
 	if err != nil {
 		return
 	}
-	result.Flag = someBool
-	logrus.Println("lwwbool, ts", timeStamp, someBool)
-
+	result.Value = someBool
+	result.Timestamp = timeStamp
 	return
 }
 
-func (decoder *Decoder) checkTag(expectedIndex byte, tag TagType) (bool, error) {
-	if decoder.hasPending {
+type tagInfo struct {
+	TagIndex TagIndex
+	TagId    TagId
+}
+
+//TODO: hack
+const ignore = 0xFF
+
+// checkTag reads a tag or a pending tag and advances if the index does not match
+func (decoder *ChunkDecoder) checkTag(expectedIndex TagIndex, tag TagId) (bool, error) {
+	if decoder.lastTag != nil {
+		lastIndex := decoder.lastTag.TagIndex
 		//the index doesnt match, continue
-		if decoder.lastIndex != expectedIndex {
+		if lastIndex != expectedIndex && expectedIndex != ignore {
 			return false, nil
 		}
 
-		if decoder.lastTag != tag {
-			logrus.Errorf("lastTag != current,index:%d, have: %x, wants: %x", expectedIndex, decoder.lastTag, tag)
+		lastTag := decoder.lastTag.TagId
+		if lastTag != tag {
+			log.Errorf("lastTag != current,index:%d, have: %x, wants: %x", expectedIndex, lastTag, tag)
 			return false, ErrTagMismatch
 		}
 
 		//the tag matches
-		decoder.hasPending = false
+		decoder.lastTag = nil
 		return true, nil
 	}
-	id, err := decoder.GetVarint()
+	id, err := decoder.GetVarUInt32()
 	if err == io.EOF {
-		logrus.Warn("EOF reading tag: ", tag)
+		//TODO: handle better
+		// logrus.Warn("EOF reading tag: ", tag)
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
 
-	index := byte(id >> 4 & 0xF)
-	currentTag := TagType(id & 0xF)
-	if index != expectedIndex {
-		logrus.Warn("skipping index no match: ", index, tag)
-		decoder.hasPending = true
-		decoder.lastIndex = index
-		decoder.lastTag = currentTag
+	index := TagIndex(id >> 4)
+	currentTag := TagId(id & 0xF)
+	if index != expectedIndex && expectedIndex != ignore {
+		log.Trace("skipping index no match: ", index, tag)
+		decoder.lastTag = &tagInfo{
+			TagIndex: index,
+			TagId:    currentTag,
+		}
 		return false, nil
 	}
 
@@ -191,79 +191,84 @@ func (decoder *Decoder) checkTag(expectedIndex byte, tag TagType) (bool, error) 
 	return true, nil
 }
 
-func (decoder *Decoder) ExtractLwwString(control byte) (result LwwString, found bool, err error) {
-	if found, err = decoder.checkTag(control, ItemTag); !found {
+func (decoder *ChunkDecoder) ExtractLwwString(index TagIndex) (result LwwString, found bool, err error) {
+	if found, err = decoder.checkTag(index, ItemTag); !found {
 		return
 	}
 
-	totalLength, err := decoder.GetInt()
+	elementLength, err := decoder.GetUInt32()
 	if err != nil {
 		return
 	}
+	pos := decoder.Pos()
+	endPos := pos + int(elementLength)
+	log.Printf("LwwString, Int?: %d, pos:%d, max:%d", elementLength, pos, decoder.max)
 	timestamp, _, err := decoder.ExtractCrdtId(1)
 	if err != nil {
 		return
 	}
 
-	log.Printf("got totalLength: %d timestamp: %x\n", totalLength, timestamp)
-	if totalLength == 0 {
-		return
-	}
-
-	//tagid
 	_, err = decoder.checkTag(2, ItemTag)
 	if err != nil {
 		return
 	}
 
-	someInt, err := decoder.GetInt()
+	someInt2, err := decoder.GetUInt32()
 	if err != nil {
 		return
 	}
-	log.Printf("got someInt??: %d \n", someInt)
+	log.Printf("Lww someInt2??: %d ", someInt2)
 
-	strLen, err := decoder.GetVarint()
+	strLen, err := decoder.GetVarUInt32()
 	if err != nil {
 		return
 	}
 
-	log.Printf("got strlen %d \n", strLen)
+	log.Printf("got strlen %d ", strLen)
 	isAscii, err := decoder.GetByte()
 	if err != nil {
 		return
 	}
-	if strLen == 0 {
-		return
-	}
-	log.Printf("got isascii %d \n", isAscii)
+	// if strLen == 0 {
+	// 	return
+	// }
+	log.Printf("got isascii %d ", isAscii)
 	theStr, err := decoder.GetBytes(int(strLen))
 	if err != nil {
 		return
 	}
 	result.Value = string(theStr)
 	result.Timestamp = timestamp
-	log.Printf("got string %s \n", theStr)
-	return
-}
-
-type TagType byte
-
-const (
-	ItemTag   TagType = 12
-	CrdtTag   TagType = 15
-	NumberTag TagType = 4
-	BoolTag   TagType = 1
-)
-
-func (d *Decoder) ExtractInt(control byte) (result uint32, found bool, err error) {
-	if found, err = d.checkTag(control, NumberTag); !found {
+	log.Printf("got string: '%s'", theStr)
+	pos = decoder.Pos()
+	if pos > endPos {
+		err = fmt.Errorf("buffer overflow, pos: %d max: %d", pos, endPos)
 		return
 	}
-	result, err = d.GetInt()
+
+	log.Printf("LwwStringEnd, pos:%d, max:%d", pos, decoder.max)
 	return
 }
-func (d *Decoder) ExtractBool(control byte) (result bool, found bool, err error) {
-	if found, err = d.checkTag(control, BoolTag); !found {
+
+type TagId byte
+type TagIndex int16
+
+const (
+	CrdtTag   TagId = 0xf
+	ItemTag   TagId = 0xc
+	NumberTag TagId = 4
+	BoolTag   TagId = 1
+)
+
+func (d *ChunkDecoder) ExtractInt(index TagIndex) (result uint32, found bool, err error) {
+	if found, err = d.checkTag(index, NumberTag); !found {
+		return
+	}
+	result, err = d.GetUInt32()
+	return
+}
+func (d *ChunkDecoder) ExtractBool(index TagIndex) (result bool, found bool, err error) {
+	if found, err = d.checkTag(index, BoolTag); !found {
 		return
 	}
 
@@ -272,39 +277,89 @@ func (d *Decoder) ExtractBool(control byte) (result bool, found bool, err error)
 	return
 }
 
-func (d *Decoder) ExtractByte(control byte) (result byte, found bool, err error) {
-	if found, err = d.checkTag(control, BoolTag); !found {
+func (d *ChunkDecoder) ExtractByte(index TagIndex) (result byte, found bool, err error) {
+	if found, err = d.checkTag(index, BoolTag); !found {
 		return
 	}
 	result, err = d.GetByte()
 	return
 }
-func (d *Decoder) ExtractFloat(control byte) (result float32, found bool, err error) {
-	if found, err = d.checkTag(control, NumberTag); !found {
+func (d *ChunkDecoder) ExtractFloat(index TagIndex) (result float32, found bool, err error) {
+	if found, err = d.checkTag(index, NumberTag); !found {
 		return
 	}
-	err = binary.Read(d.r, binary.LittleEndian, &result)
+	err = binary.Read(d, binary.LittleEndian, &result)
 	return
 }
-func (decoder *Decoder) ExtractCrdtId(index byte) (result CrdtId, found bool, err error) {
+func (decoder *ChunkDecoder) ExtractCrdtId(index TagIndex) (result CrdtId, found bool, err error) {
 	if found, err = decoder.checkTag(index, CrdtTag); !found {
 		return
 	}
-	short, err := decoder.GetVarint()
+	short, err := decoder.GetVarUInt32()
 	if err != nil {
+		log.Error("can't get short1")
 		return
 	}
 	part1 := short
 
-	short, err = decoder.GetVarint()
+	short2, err := decoder.GetVarInt64()
 	if err != nil {
+		log.Error("can't get short2")
 		return
 	}
 
-	if short&0xFFFF0000 != 0 {
+	if short2&0xFFFF0000 != 0 {
+		log.Warnf("short1: %x, short2 > fmask true, %x", short, short2)
 		return
 	}
 	part2 := uint64(short)
 	result = CrdtId(uint64(part1)<<(16+32) | part2)
+	return
+}
+
+func (d *ChunkDecoder) ExtractBob() (bob []byte, err error) {
+	bobLength := d.max - d.position
+	if bobLength > 0 {
+		bob, err = d.GetBytes(bobLength)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+type Chunk struct {
+	Size   int32
+	Header Header
+}
+
+func ExtractChunk(reader io.Reader, index int) (ch Chunk, err error) {
+	var size int32
+	err = binary.Read(reader, binary.LittleEndian, &size)
+	if err != nil {
+		return
+	}
+	buffer := make([]byte, 4)
+	// var tag uint32
+	_, err = io.ReadFull(reader, buffer[:4])
+	if err != nil {
+		return
+	}
+
+	// b1 := tag >> 0x10 & 0xF
+	// b2 := tag >> 0x8 & 0xF
+	header := Header{
+		TagID: buffer[3],
+		B1:    buffer[2],
+		B2:    buffer[1],
+	}
+	if err != nil {
+		return
+	}
+
+	ch = Chunk{
+		Size:   size,
+		Header: header,
+	}
 	return
 }
