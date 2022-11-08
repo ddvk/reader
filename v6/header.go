@@ -12,40 +12,35 @@ type Header struct {
 }
 
 func (h Header) String() string {
-	return fmt.Sprintf("Tag: %v, length: %d", h.Info.ChunkType, h.Size)
+	return fmt.Sprintf("Tag: %v, length: %d, MinVer:%d, CurVer:%d", h.Info.PayloadType, h.Size, h.Info.MinVersion, h.Info.CurVersion)
 }
 
 type HeaderInfo struct {
-	ChunkType TagType
-	B1        byte //middle
-	B2        byte //last
+	PayloadType TagType
+	TreeNodeInfo
 }
 
-func ReadHeader(reader io.Reader) (ch Header, err error) {
+func ReadHeader(reader io.Reader) (h Header, err error) {
 	var size int32
 	err = binary.Read(reader, binary.LittleEndian, &size)
 	if err != nil {
 		return
 	}
 	buffer := make([]byte, 4)
-	// var tag uint32
-	_, err = io.ReadFull(reader, buffer[:4])
+	_, err = io.ReadFull(reader, buffer)
 	if err != nil {
 		return
 	}
 
-	// b1 := tag >> 0x10 & 0xF
-	// b2 := tag >> 0x8 & 0xF
 	header := HeaderInfo{
-		ChunkType: TagType(buffer[3]),
-		B1:        buffer[2],
-		B2:        buffer[1],
-	}
-	if err != nil {
-		return
+		PayloadType: TagType(buffer[3]),
+		TreeNodeInfo: TreeNodeInfo{
+			MinVersion: buffer[2],
+			CurVersion: buffer[1],
+		},
 	}
 
-	ch = Header{
+	h = Header{
 		Size: size,
 		Info: header,
 	}

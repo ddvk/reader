@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
-	"strings"
 )
 
 type reader interface {
@@ -64,10 +62,6 @@ func (d *BinaryDeserializer) ReadByte() (b byte, err error) {
 	return
 }
 
-func (d *BinaryDeserializer) GetByte() (byte, error) {
-	return d.ReadByte()
-}
-
 func (d *BinaryDeserializer) GetBytes(size int) (result []byte, err error) {
 	result = make([]byte, size)
 	_, err = io.ReadFull(d, result)
@@ -79,6 +73,11 @@ func (d *BinaryDeserializer) GetShort() (result uint16, err error) {
 }
 
 func (d *BinaryDeserializer) GetFloat32() (result float32, err error) {
+	err = binary.Read(d, binary.LittleEndian, &result)
+	return
+}
+
+func (d *BinaryDeserializer) GetFloat64() (result float64, err error) {
 	err = binary.Read(d, binary.LittleEndian, &result)
 	return
 }
@@ -100,11 +99,7 @@ func (d *BinaryDeserializer) GetUInt32() (val uint32, err error) {
 	return
 }
 
-func DebugBuffer(buffer []byte, pos, max int) {
-	fmt.Println(hex.EncodeToString(buffer))
-	padding := ""
-	if pos > 0 {
-		padding = strings.Repeat("  ", pos-1)
-	}
-	fmt.Printf("%s ^  pos: %d (max: %d x%x)\n", padding, pos, max, max)
+func (d *BinaryDeserializer) GetInt32() (val int32, err error) {
+	err = binary.Read(d, binary.LittleEndian, &val)
+	return
 }

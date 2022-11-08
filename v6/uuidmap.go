@@ -1,6 +1,9 @@
 package v6
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+)
 
 type UUIDMap struct {
 	UUID2Index map[uuid.UUID]AuthorId
@@ -20,6 +23,7 @@ func (um *UUIDMap) Entries() int {
 }
 
 func (um *UUIDMap) Add(u uuid.UUID, index AuthorId) {
+	logrus.Tracef("Add Author: %d", index)
 	if um.Index2UUID == nil {
 		um.Index2UUID = make(map[AuthorId]uuid.UUID)
 	}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	v6 "myreader/v6"
 	"os"
@@ -24,7 +23,7 @@ func parseSceneFile(file io.ReadSeekCloser) (err error) {
 	if err != nil {
 		return
 	}
-	log.Info("parsed: ", scene.Author)
+	log.Info("parsed: ", scene)
 	return
 }
 
@@ -43,44 +42,16 @@ func _main() error {
 	return parseSceneFile(file)
 }
 
-type A struct {
-	foo int
-}
-type B struct {
-	*A
-	Bar int
-}
-
-func doStuff(s any) {
-	s, ok := s.(*A)
-	if ok {
-		fmt.Println("it is a")
-
-	}
-	_, ok = s.(*B)
-	if ok {
-		fmt.Println("it is b")
-
-	}
-
-}
-
-type C struct {
-}
-
-func Test[T *any]() T {
-	return nil
-}
 func main() {
 	prefixed := &prefixed.TextFormatter{
-		DisableColors:   false,
 		TimestampFormat: "2006-01-02 15:04:05",
 		FullTimestamp:   true,
 		ForceFormatting: true,
+		ForceColors:     true,
 	}
 	log.SetFormatter(prefixed)
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.TraceLevel)
+	log.SetLevel(log.DebugLevel)
 	err := _main()
 	if err != nil {
 		log.Fatal(err)

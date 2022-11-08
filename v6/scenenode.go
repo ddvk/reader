@@ -11,16 +11,16 @@ import (
 type TagType byte
 
 const (
-	InfoTag              TagType = 0
-	SceneTreeNodeMoveTag TagType = 1
-	SceneTreeNodeTag     TagType = 2
-	GlyphItemTag         TagType = 3
-	GroupItemTag         TagType = 4
-	LineItemTag          TagType = 5
-	TextItemTag          TagType = 6
-	RootTextTag          TagType = 7
-	UUIDIdexTag          TagType = 9
-	PageInfoTag          TagType = 10
+	InfoTag          TagType = 0
+	SceneTreeTag     TagType = 1
+	SceneTreeNodeTag TagType = 2
+	GlyphItemTag     TagType = 3
+	GroupItemTag     TagType = 4
+	LineItemTag      TagType = 5
+	TextItemTag      TagType = 6
+	RootTextTag      TagType = 7
+	UUIDIdexTag      TagType = 9
+	PageInfoTag      TagType = 10
 )
 
 func (s TagType) String() string {
@@ -34,6 +34,16 @@ func (s TagType) String() string {
 		name = "Text"
 	case SceneTreeNodeTag:
 		name = "SceneTreeNode"
+	case RootTextTag:
+		name = "RootText"
+	case InfoTag:
+		name = "Info"
+	case PageInfoTag:
+		name = "PageInfo"
+	case UUIDIdexTag:
+		name = "UUIDIndex"
+	case SceneTreeTag:
+		name = "SceneTree"
 	}
 	return fmt.Sprintf("%d (%s)", byte(s), name)
 }
@@ -58,8 +68,8 @@ type Scene struct {
 	Author              AuthorId
 	AuthorUUID          uuid.UUID
 	Layers              []*Layer
-	Mi                  MigrationInfo
-	Pi                  PageInfo
+	MigrationInfo       MigrationInfo
+	PageInfo            PageInfo
 	UUIDMap             UUIDMap
 	CurrentLayer        int
 	IsBackgroundVisible bool
@@ -89,16 +99,16 @@ type MigrationInfo struct {
 	Bob         []byte
 }
 type TreeNodeInfo struct {
-	curVersion uint8
-	minVersion uint8
+	CurVersion byte
+	MinVersion byte
 }
 
 type PageInfo struct {
-	Loads     uint32
-	Merges    uint32
-	TextChars uint32
-	TextLinex uint32
-	Bob       uint
+	Loads     int32
+	Merges    int32
+	TextChars int32
+	TextLinex int32
+	Bob       []byte
 }
 
 func (p PageInfo) String() string {
@@ -106,11 +116,10 @@ func (p PageInfo) String() string {
 }
 
 type AuthorId uint16
-type SequenceId uint64
 
 type Sequence[T any] struct {
 	Author       AuthorId
-	Sequence     SequenceId
+	Id           CrdtId
 	Container    []T
 	Bob          []byte
 	DeletedCount int
@@ -118,16 +127,17 @@ type Sequence[T any] struct {
 }
 
 func (s *Sequence[T]) Add(item T) {
+	//TODO: update MaxSeen
 	s.Container = append(s.Container, item)
 }
 
 type SceneTreeNode struct {
 	Id                   CrdtId
-	Sequence             Sequence[SceneItemBase]
+	Sequence             Sequence[SceneBaseItem]
 	Name                 Lww[string]
 	Visible              Lww[bool]
 	AnchorId             Lww[CrdtId]
-	AnchorMode           Lww[byte]
+	AnchorMode           Lww[byte] //0 n ,1 b ,2 v
 	AnchorThreshold      Lww[float32]
 	AnchorInitialOriginX Lww[float32]
 	Bob                  []byte
@@ -135,15 +145,12 @@ type SceneTreeNode struct {
 	Width                float32
 	Height               float32
 	AnchorOrigin         float32
-
-	Info       Info
-	Children   map[CrdtId]SceneTreeNode
-	CurVersion byte
-	MinVersion byte
+	Info                 Info
+	Children             map[CrdtId]SceneTreeNode
 }
 
 func (s SceneTreeNode) String() string {
-	return fmt.Sprintf("crdt:%v name:%s", s.Id, s.Name.Value)
+	return fmt.Sprintf("SceneTreeNode: Id: %v Name:'%s' SeqId:%v", s.Id, s.Name.Value, s.Sequence.Id)
 }
 
 type PenPoint struct {
@@ -192,4 +199,8 @@ type TreeMoveInfo struct {
 	IsUpdate bool
 	Info     TreeItemInfo
 	Bob      []byte
+}
+
+func (t TreeMoveInfo) String() string {
+	return fmt.Sprintf("TreeMoveNode: Id: %v NodeId: %v, Min:%d, Cur:%d", t.Id, t.NodeId, t.Info.Value.MinVersion, t.Info.Value.CurrentVersion)
 }
