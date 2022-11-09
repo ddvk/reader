@@ -1,6 +1,7 @@
 package v6
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ func (s *SceneReader) ExtractScene(r io.Reader) (scene Scene, err error) {
 		}
 		log.Infof("%v, position:\t0x%-x", header, pos)
 
-		err = s.parseHeader(header, r)
+		err = s.parsePayload(header, r)
 		if err != nil {
 			return
 		}
@@ -47,7 +48,7 @@ func (s *SceneReader) ExtractScene(r io.Reader) (scene Scene, err error) {
 	}
 }
 
-func (s *SceneReader) parseHeader(header Header, reader io.Reader) (err error) {
+func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) {
 	headerInfo := header.Info
 	nodeType := headerInfo.PayloadType
 	max := int(header.Size)
@@ -75,9 +76,9 @@ func (s *SceneReader) parseHeader(header Header, reader io.Reader) (err error) {
 		//sceneitem
 	case GlyphItemTag, GroupItemTag, LineItemTag, 8:
 		var item Item[SceneBaseItem]
-		var id CrdtId
-		item, id, err = s.readSceneItem(nodeType)
-		log.Debug(id, item)
+		var parentNodeId CrdtId
+		item, parentNodeId, err = s.readSceneItem(nodeType)
+		log.Debug(parentNodeId, item)
 	case RootTextTag:
 		var node SceneTextItem
 		node, err = s.readRootText(nodeType)
@@ -114,37 +115,31 @@ func (s *SceneReader) parseHeader(header Header, reader io.Reader) (err error) {
 // 	return &SceneItem{}
 // }
 
-func (s *SceneReader) extractMap() (err error) {
-	textItem := new(Item[TextItem])
-	elementLength, err := s.e.d.GetVarUInt32()
-	if err != nil {
-		return
-	}
-	log.Trace(elementLength)
-	length, _, err := s.e.ExtractUInt(0)
+func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
+	length, _, err := e.ExtractUInt(0)
 	if err != nil {
 		return
 	}
 	// for {
-	textItem.Id, _, err = s.e.ExtractCrdtId(2)
+	textItem.Id, _, err = e.ExtractCrdtId(2)
 	if err != nil {
 		return
 	}
-	textItem.Left, _, err = s.e.ExtractCrdtId(3)
+	textItem.Left, _, err = e.ExtractCrdtId(3)
 	if err != nil {
 		return
 	}
-	textItem.Right, _, err = s.e.ExtractCrdtId(4)
+	textItem.Right, _, err = e.ExtractCrdtId(4)
 	if err != nil {
 		return
 	}
-	textItem.DeletedLength, _, err = s.e.ExtractInt(5)
+	textItem.DeletedLength, _, err = e.ExtractInt(5)
 	if err != nil {
 		return
 	}
 
 	var found bool
-	elementLength2, found, err := s.e.ExtractUInt(6)
+	elementLength2, found, err := e.ExtractUInt(6)
 	if err != nil {
 		return
 	}
@@ -154,21 +149,43 @@ func (s *SceneReader) extractMap() (err error) {
 	// }
 	// }
 	var strLength uint32
-	strLength, err = s.e.d.GetVarUInt32()
+	strLength, err = e.d.GetVarUInt32()
 	if err != nil {
 		return
 	}
-	_, err = s.e.d.ReadByte()
+	_, err = e.d.ReadByte()
 	if err != nil {
 		return
 	}
-	var b []byte
-	b, err = s.e.d.GetBytes(int(strLength))
+	var strBytes []byte
+	strBytes, err = e.d.GetBytes(int(strLength))
 	if err != nil {
 		return
 	}
-	log.Trace("Pos: %x", s.e.d.Pos())
-	log.Debug(string(b))
+	textItem.Value.Text = string(strBytes)
+	log.Debug(textItem.Value.Text)
+
+	textItem.Value.Format, _, err = e.ExtractUInt(2)
+	if err != nil {
+		return
+	}
+	return
+}
+func (s *SceneReader) extractItems(seq *Sequence[*Item[TextItem]]) (err error) {
+	elementLength, err := s.e.d.GetVarUInt32()
+	if err != nil {
+		return
+	}
+	log.Trace(elementLength)
+	for ix := 0; ix < int(elementLength); ix++ {
+		var item Item[TextItem]
+		item, err = s.e.ExtractTextItem()
+		if err != nil {
+			return
+		}
+		seq.Add(&item)
+
+	}
 	return
 }
 
@@ -194,9 +211,10 @@ func (s *SceneReader) readRootText(nodeType TagType) (sceneItem SceneTextItem, e
 	maxLength := length3 + uint32(s.e.d.Pos())
 	log.Trace(maxLength)
 
-	//sceneItem.Sequence.Add(&textItem.Value)
-	//loop
-
+	err = s.extractItems(&sceneItem.Sequence)
+	if err != nil {
+		return
+	}
 	//todo: vector
 	sceneItem.Sequence.Bob, err = s.e.ExtractBobUntil(int(maxLength))
 	if err != nil {
@@ -212,12 +230,19 @@ func (s *SceneReader) readRootText(nodeType TagType) (sceneItem SceneTextItem, e
 		return
 	}
 	mapEnd := mapLength + uint32(s.e.d.Pos())
-	log.Trace(mapLength)
-	//TODO:map
-	_, err = s.e.ExtractBobUntil(int(mapEnd))
+
+	b, err := s.e.d.ReadByte()
 	if err != nil {
 		return
 	}
+	log.Trace(b, mapLength)
+	//TODO: wip map
+	bob1, err := s.e.ExtractBobUntil(int(mapEnd))
+	if err != nil {
+		return
+	}
+	log.Info(hex.EncodeToString(bob1))
+	log.Info(string(bob1))
 
 	//length of next
 	_, _, err = s.e.ExtractUInt(3)

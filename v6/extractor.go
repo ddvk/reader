@@ -96,7 +96,7 @@ func (decoder *Extractor) ExtractLwwByte(control TagIndex) (result Lww[byte], fo
 	if found, err = decoder.checkTag(control, Length4); !found {
 		return
 	}
-	_, err = decoder.d.GetUInt32()
+	_, err = decoder.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (decoder *Extractor) ExtractLwwFloat(control TagIndex) (result Lww[float32]
 	if found, err = decoder.checkTag(control, Length4); !found {
 		return
 	}
-	_, err = decoder.d.GetUInt32()
+	_, err = decoder.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -134,21 +134,18 @@ func (decoder *Extractor) ExtractLwwFloat(control TagIndex) (result Lww[float32]
 
 	return
 }
-func (decoder *Extractor) ExtractLwwCrdt(control TagIndex) (result Lww[CrdtId], found bool, err error) {
-	if found, err = decoder.checkTag(control, Length4); !found {
+func (e *Extractor) ExtractLwwCrdt(control TagIndex) (result Lww[CrdtId], found bool, err error) {
+	elementLength, found, err := e.ExtractUInt(control)
+	if err != nil || !found {
 		return
 	}
-	elementLength, err := decoder.d.GetUInt32()
+	pos := e.d.Pos()
+	log.Printf("ElementLength: %d, pos:%d, max:%d", elementLength, pos, e.d.max)
+	val, _, err := e.ExtractCrdtId(1)
 	if err != nil {
 		return
 	}
-	pos := decoder.d.Pos()
-	log.Printf("ElementLength: %d, pos:%d, max:%d", elementLength, pos, decoder.d.max)
-	val, _, err := decoder.ExtractCrdtId(1)
-	if err != nil {
-		return
-	}
-	timeStamp, _, err := decoder.ExtractCrdtId(2)
+	timeStamp, _, err := e.ExtractCrdtId(2)
 	if err != nil {
 		return
 	}
@@ -163,7 +160,7 @@ func (decoder *Extractor) ExtractLwwBool(control TagIndex) (result Lww[bool], fo
 	}
 
 	//node size
-	_, err = decoder.d.GetUInt32()
+	_, err = decoder.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -242,7 +239,7 @@ func (decoder *Extractor) ExtractLwwString(index TagIndex) (result Lww[string], 
 		return
 	}
 
-	elementLength, err := decoder.d.GetUInt32()
+	elementLength, err := decoder.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -293,14 +290,15 @@ func (e *Extractor) ExtractUInt(index TagIndex) (result uint32, found bool, err 
 	if found, err = e.checkTag(index, Length4); !found {
 		return
 	}
-	result, err = e.d.GetUInt32()
+	result, err = e.d.GetFixedUInt32()
 	return
 }
-func (e *Extractor) ExtractInt(index TagIndex) (result int32, found bool, err error) {
+func (e *Extractor) ExtractInt(index TagIndex) (result int, found bool, err error) {
 	if found, err = e.checkTag(index, Byte4); !found {
 		return
 	}
-	result, err = e.d.GetInt32()
+	intResult, err := e.d.GetFixedInt32()
+	result = int(intResult)
 	return
 }
 func (e *Extractor) ExtractShort(index TagIndex) (result uint16, found bool, err error) {
@@ -350,27 +348,29 @@ func (e *Extractor) ExtractCrdtId(index TagIndex) (result CrdtId, found bool, er
 		log.Error("can't get short1")
 		return
 	}
+	if short > binary.MaxVarintLen16 {
+		err = errors.New("part1 > short max")
+		return
+	}
 	part1 := short
 
-	short2, err := e.d.GetVarInt64()
+	short2, err := e.d.GetVarUInt64()
 	if err != nil {
-		log.Error("can't get short2")
 		return
 	}
 
 	if short2&0xFFFF0000 != 0 {
 		log.Warnf("short1: %x, short2 > fmask true, %x", short, short2)
-		return
 	}
 	part2 := uint64(short2)
-	result = CrdtId(uint64(part1)<<(32) | part2)
+	result = CrdtId(uint64(part1)<<48 | part2)
 	return
 }
 func (e *Extractor) ExtractInfo(index TagIndex) (result TreeItemInfo, found bool, err error) {
 	if found, err = e.checkTag(index, Length4); !found {
 		return
 	}
-	nodeLength, err := e.d.GetUInt32()
+	nodeLength, err := e.d.GetFixedUInt32()
 	nodeEnd := nodeLength + uint32(e.d.Pos())
 	if err != nil {
 		return
@@ -383,7 +383,7 @@ func (e *Extractor) ExtractInfo(index TagIndex) (result TreeItemInfo, found bool
 	if found, err = e.checkTag(2, Length4); !found {
 		return
 	}
-	item, err := e.d.GetUInt32()
+	item, err := e.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -475,41 +475,33 @@ func (e *Extractor) ExtractLine() (item *LineItem, err error) {
 	}
 	line.Color = byte(color)
 
-	thickness, _, err := e.ExtractDouble(3)
+	line.ThicknessScale, _, err = e.ExtractDouble(3)
 	if err != nil {
 		return
 	}
-	line.ThicknessScale = thickness
 
 	line.StartingLength, _, err = e.ExtractFloat(4)
 	if err != nil {
 		return
 	}
-	found, err := e.checkTag(5, Length4)
+	length, found, err := e.ExtractUInt(5)
 	if err != nil {
 		return
 	}
 	if !found {
-		log.Trace("only bob")
 		item.Bob, err = e.ExtractBob()
 		return
 	}
 
-	var length uint32
-	length, err = e.d.GetUInt32()
-	if err != nil {
-		return
-	}
-	const pointSize = 0x18
-	nPoints := int(length / pointSize)
-	if length%pointSize != 0 {
+	nPoints := int(length / PenPointSize)
+	if length%PenPointSize != 0 {
 		log.Error("point size mismatch")
 	}
 
+	var point *PenPoint
 	for i := 0; i < nPoints; i++ {
-		point, err1 := e.ExtractPoint()
-		if err1 != nil {
-			err = err1
+		point, err = e.ExtractPoint()
+		if err != nil {
 			return
 		}
 
@@ -521,16 +513,12 @@ func (e *Extractor) ExtractLine() (item *LineItem, err error) {
 	return
 }
 func (e *Extractor) ExtractSceneItem(index TagIndex) (sceneItem SceneBaseItem, err error) {
-	found := false
-	if found, err = e.checkTag(index, Length4); !found {
+	length, found, err := e.ExtractUInt(index)
+	if err != nil || !found {
 		return
 	}
-	i, err := e.d.GetUInt32()
-	if err != nil {
-		return
-	}
-	elementEnd := int(i) + e.d.Pos()
-	log.Infof("sceneItem length: %d", i)
+	elementEnd := int(length) + e.d.Pos()
+	log.Infof("sceneItem length: %d", length)
 	if err != nil {
 		return
 	}
@@ -578,7 +566,7 @@ func (e *Extractor) ExtractUUIDPair() (u uuid.UUID, index AuthorId, err error) {
 		return
 	}
 
-	elementLength, err := e.d.GetUInt32()
+	elementLength, err := e.d.GetFixedUInt32()
 	if err != nil {
 		return
 	}
@@ -618,5 +606,4 @@ func (e *Extractor) Debug() {
 		padding = strings.Repeat("  ", pos-1)
 	}
 	fmt.Printf("%s ^  pos: %d\n", padding, pos)
-	fmt.Println(string(e.buffer))
 }

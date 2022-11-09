@@ -61,7 +61,7 @@ const (
 type CrdtId uint64
 
 func (c CrdtId) String() string {
-	return fmt.Sprintf("%x", uint64(c))
+	return fmt.Sprintf("%x(%d)", uint64(c), uint64(c))
 }
 
 type Scene struct {
@@ -104,10 +104,10 @@ type TreeNodeInfo struct {
 }
 
 type PageInfo struct {
-	Loads     int32
-	Merges    int32
-	TextChars int32
-	TextLinex int32
+	Loads     int
+	Merges    int
+	TextChars int
+	TextLinex int
 	Bob       []byte
 }
 
@@ -152,6 +152,8 @@ type SceneTreeNode struct {
 func (s SceneTreeNode) String() string {
 	return fmt.Sprintf("SceneTreeNode: Id: %v Name:'%s' SeqId:%v", s.Id, s.Name.Value, s.Sequence.Id)
 }
+
+const PenPointSize = 0x18
 
 type PenPoint struct {
 	X         float32

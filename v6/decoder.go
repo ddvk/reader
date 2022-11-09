@@ -39,7 +39,7 @@ func NewDeserializer(buffer []byte) *BinaryDeserializer {
 	return decoder
 }
 
-// Pos current position
+// Pos current position in the stream
 func (d *BinaryDeserializer) Pos() int {
 	return d.position
 }
@@ -91,15 +91,15 @@ func (d *BinaryDeserializer) GetVarUInt32() (result uint32, err error) {
 	return uint32(val), err
 }
 
-func (d *BinaryDeserializer) GetVarInt64() (uint64, error) {
+func (d *BinaryDeserializer) GetVarUInt64() (uint64, error) {
 	return binary.ReadUvarint(d)
 }
-func (d *BinaryDeserializer) GetUInt32() (val uint32, err error) {
+func (d *BinaryDeserializer) GetFixedUInt32() (val uint32, err error) {
 	err = binary.Read(d, binary.LittleEndian, &val)
 	return
 }
 
-func (d *BinaryDeserializer) GetInt32() (val int32, err error) {
+func (d *BinaryDeserializer) GetFixedInt32() (val int32, err error) {
 	err = binary.Read(d, binary.LittleEndian, &val)
 	return
 }

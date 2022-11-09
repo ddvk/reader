@@ -43,7 +43,7 @@ func (t LineItem) String() string {
 
 type SceneTextItem struct {
 	SceneItem
-	Sequence Sequence[*TextItem]
+	Sequence Sequence[*Item[TextItem]]
 	Position Point
 }
 type Point struct {
@@ -103,7 +103,7 @@ type Item[T any] struct {
 	Left          CrdtId
 	Right         CrdtId
 	Value         T
-	DeletedLength int32
+	DeletedLength int
 	Bob           []byte
 }
 
