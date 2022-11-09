@@ -655,3 +655,287 @@ func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
 	}
 	return
 }
+
+func (e *Extractor) extractItems(seq *Sequence[*Item[TextItem]]) (err error) {
+	elementLength, err := e.d.GetVarUInt32()
+	if err != nil {
+		return
+	}
+	log.Trace(elementLength)
+	for ix := 0; ix < int(elementLength); ix++ {
+		var item Item[TextItem]
+		item, err = e.ExtractTextItem()
+		if err != nil {
+			return
+		}
+		seq.Add(&item)
+	}
+	return
+}
+
+func (e *Extractor) ReadRootText(nodeType TagType) (sceneItem SceneTextItem, err error) {
+	sceneItem.Item().ParentId, _, err = e.ExtractCrdtId(1)
+	if err != nil {
+		return
+	}
+	length, _, err := e.ExtractUInt(2)
+	if err != nil {
+		return
+	}
+	log.Trace("elemtn length: ", length)
+	length2, _, err := e.ExtractUInt(1)
+	if err != nil {
+		return
+	}
+	log.Trace(length2)
+	length3, _, err := e.ExtractUInt(1)
+	if err != nil {
+		return
+	}
+	maxLength := length3 + uint32(e.d.Pos())
+	log.Trace(maxLength)
+
+	err = e.extractItems(&sceneItem.Sequence)
+	if err != nil {
+		return
+	}
+	//todo: vector
+	sceneItem.Sequence.Bob, err = e.ExtractBobUntil(int(maxLength))
+	if err != nil {
+		return
+	}
+	length4, _, err := e.ExtractUInt(2)
+	if err != nil {
+		return
+	}
+	log.Trace(length4)
+	mapLength, _, err := e.ExtractUInt(1)
+	if err != nil {
+		return
+	}
+	mapEnd := mapLength + uint32(e.d.Pos())
+
+	b, err := e.d.ReadByte()
+	if err != nil {
+		return
+	}
+	log.Trace(b, mapLength)
+	//TODO: wip map
+	bob1, err := e.ExtractBobUntil(int(mapEnd))
+	if err != nil {
+		return
+	}
+	log.Info(hex.EncodeToString(bob1))
+	log.Info(string(bob1))
+
+	//length of next
+	_, _, err = e.ExtractUInt(3)
+
+	if err != nil {
+		return
+	}
+
+	sceneItem.Position.X, err = e.d.GetFloat64()
+	if err != nil {
+		return
+	}
+	sceneItem.Position.Y, err = e.d.GetFloat64()
+	if err != nil {
+		return
+	}
+
+	width, _, err := e.ExtractFloat(4)
+	log.Trace(width)
+
+	return
+}
+func (e *Extractor) ReadSceneItem(nodeType TagType) (item Item[SceneBaseItem], parentId CrdtId, err error) {
+	parentId, _, err = e.ExtractCrdtId(1)
+	if err != nil {
+		return
+	}
+	item.Id, _, err = e.ExtractCrdtId(2)
+	if err != nil {
+		return
+	}
+	item.Left, _, err = e.ExtractCrdtId(3)
+	if err != nil {
+		return
+	}
+	item.Right, _, err = e.ExtractCrdtId(4)
+	if err != nil {
+		return
+	}
+	item.DeletedLength, _, err = e.ExtractInt(5)
+	if err != nil {
+		return
+	}
+	item.Value, err = e.ExtractSceneItem(6)
+	if err != nil {
+		return
+	}
+	if err != nil {
+		return
+	}
+
+	item.Bob, err = e.ExtractBob()
+	return
+}
+
+// func sw(x int) int {
+// 	if x == 4 {
+// 		return 2
+// 	}
+// 	if x > 9 {
+// 		return 0
+// 	}
+// 	return 1
+// }
+
+func (e *Extractor) ParserUUID() (uuidMap UUIDMap, err error) {
+	count, err := e.d.GetVarUInt32()
+	if err != nil {
+		return
+	}
+	log.Debug("got uuids: ", count)
+	for i := 0; i < int(count); i++ {
+		var index AuthorId
+		var u uuid.UUID
+		u, index, err = e.ExtractUUIDPair()
+		if err != nil {
+			return
+		}
+
+		uuidMap.Add(u, AuthorId(index))
+	}
+	return
+}
+
+func (e *Extractor) ParseMigrationInfo() (migrationInfo MigrationInfo, err error) {
+	migrationInfo.MigrationId, _, err = e.ExtractCrdtId(1)
+	if err != nil {
+		return
+	}
+	migrationInfo.IsDevice, _, err = e.ExtractBool(2)
+	if err != nil {
+		return
+	}
+	migrationInfo.Bob, err = e.ExtractBob()
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (e *Extractor) ReadPageInfo() (pageInfo PageInfo, err error) {
+	pageInfo.Loads, _, err = e.ExtractInt(1)
+	if err != nil {
+		return
+	}
+	pageInfo.Merges, _, err = e.ExtractInt(2)
+	if err != nil {
+		return
+	}
+	pageInfo.TextChars, _, err = e.ExtractInt(3)
+	if err != nil {
+		return
+	}
+	pageInfo.TextLinex, _, err = e.ExtractInt(4)
+	if err != nil {
+		return
+	}
+	pageInfo.Bob, err = e.ExtractBob()
+	if err != nil {
+		return
+	}
+	log.Info("Loads: ", pageInfo)
+	return
+}
+func (e *Extractor) ReadSceneNode() (node SceneTreeNode, err error) {
+	node.Id, _, err = e.ExtractCrdtId(1)
+	if err != nil {
+		return
+	}
+	node.Name, _, err = e.ExtractLwwString(2)
+	if err != nil {
+		return
+	}
+
+	node.Visible, _, err = e.ExtractLwwBool(3)
+	if err != nil {
+		return
+	}
+
+	selectedId, hasAnchor, err := e.ExtractCrdtId(4)
+	if err != nil {
+		return
+	}
+	if hasAnchor {
+		node.AnchorId.Value = selectedId
+		node.AnchorMode.Value, _, err = e.ExtractByte(5)
+		if err != nil {
+			return
+		}
+
+		node.AnchorThreshold.Value, _, err = e.ExtractFloat(6)
+		if err != nil {
+			return
+		}
+
+	} else {
+		node.AnchorId, _, err = e.ExtractLwwCrdt(7)
+		if err != nil {
+			return
+		}
+		node.AnchorMode, _, err = e.ExtractLwwByte(8)
+		if err != nil {
+			return
+		}
+
+		node.AnchorThreshold, _, err = e.ExtractLwwFloat(9)
+		if err != nil {
+			return
+		}
+
+		node.AnchorInitialOriginX, _, err = e.ExtractLwwFloat(10)
+		if err != nil {
+			return
+		}
+	}
+	node.Bob, err = e.ExtractBob()
+	if err != nil {
+		log.Warn("can't get bob", err)
+		return
+	}
+
+	return
+}
+
+func (e *Extractor) TreeNode() (node TreeMoveInfo, err error) {
+	node.Id, _, err = e.ExtractCrdtId(1)
+	if err != nil {
+		return
+	}
+	hasNode := false
+	node.NodeId, hasNode, err = e.ExtractCrdtId(2)
+	if err != nil {
+		return
+	}
+	if !hasNode {
+		log.Warn("no node")
+
+	}
+	node.IsUpdate, _, err = e.ExtractBool(3)
+	if err != nil {
+		return
+	}
+	node.ItemInfo, _, err = e.ExtractInfo(4)
+	if err != nil {
+		return
+	}
+	node.Bob, err = e.ExtractBob()
+	if err != nil {
+		return
+	}
+	return
+}

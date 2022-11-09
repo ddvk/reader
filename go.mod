@@ -12,6 +12,8 @@ require (
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/term v0.1.0 // indirect
+	golang.org/x/tools v0.2.0 // indirect
 )

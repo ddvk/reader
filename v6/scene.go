@@ -1,18 +1,16 @@
 package v6
 
-import "github.com/google/uuid"
+import "fmt"
 
 type Scene struct {
-	Author              AuthorId
-	AuthorUUID          uuid.UUID
-	Layers              []*Layer
-	MigrationInfo       MigrationInfo
-	PageInfo            PageInfo
-	UUIDMap             UUIDMap
-	CurrentLayer        int
-	IsBackgroundVisible bool
-	IsNote              bool
-	Tree                SceneTree
+	Layers        []*Layer
+	MigrationInfo MigrationInfo
+	PageInfo      PageInfo
+	UUIDMap       UUIDMap
+}
+
+func (s Scene) String() string {
+	return fmt.Sprintf("Scene: Layers: %d", len(s.Layers))
 }
 
 type Layer struct {
@@ -20,4 +18,8 @@ type Layer struct {
 	Lines      []*LineItem
 	Highlights []*GlyphRange
 	IsVisible  bool
+}
+
+func (s Layer) String() string {
+	return fmt.Sprintf("Layer: name: %s lines: %d", s.Name, len(s.Lines))
 }

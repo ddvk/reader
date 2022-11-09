@@ -24,6 +24,9 @@ func parseSceneFile(file io.ReadSeekCloser) (err error) {
 		return
 	}
 	log.Info("parsed: ", scene)
+	for _, l := range scene.Layers {
+		log.Infof("\t %v", l)
+	}
 	return
 }
 

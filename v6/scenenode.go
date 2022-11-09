@@ -67,11 +67,6 @@ type MigrationInfo struct {
 	IsDevice    bool
 	Bob         []byte
 }
-type TreeNodeInfo struct {
-	CurVersion byte
-	MinVersion byte
-}
-
 type PageInfo struct {
 	Loads     int
 	Merges    int
@@ -103,6 +98,7 @@ func (s *Sequence[T]) Add(item T) {
 type SceneTreeNode struct {
 	Id                   CrdtId
 	Sequence             Sequence[SceneBaseItem]
+	HasSeq               bool
 	Name                 Lww[string]
 	Visible              Lww[bool]
 	AnchorId             Lww[CrdtId]
