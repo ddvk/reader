@@ -21,7 +21,6 @@ type SceneItem struct {
 
 func (t SceneItem) String() string {
 	return fmt.Sprintf("SceneItem (%v) Id:%v Parent:%v", t.Type, t.Id, t.ParentId)
-
 }
 
 func (t *SceneItem) Item() *SceneItem {
@@ -56,7 +55,6 @@ func (t *SceneTextItem) Item() *SceneItem {
 }
 
 func (t SceneTextItem) String() string {
-
 	return fmt.Sprintf("SceneText: Id: %v, containerId:%v num:%d", t.Id, t.Sequence.Id, len(t.Sequence.Container))
 }
 

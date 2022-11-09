@@ -4,8 +4,6 @@ package v6
 import (
 	"fmt"
 	"image"
-
-	"github.com/google/uuid"
 )
 
 type TagType byte
@@ -62,35 +60,6 @@ type CrdtId uint64
 
 func (c CrdtId) String() string {
 	return fmt.Sprintf("%x(%d)", uint64(c), uint64(c))
-}
-
-type Scene struct {
-	Author              AuthorId
-	AuthorUUID          uuid.UUID
-	Layers              []*Layer
-	MigrationInfo       MigrationInfo
-	PageInfo            PageInfo
-	UUIDMap             UUIDMap
-	CurrentLayer        int
-	IsBackgroundVisible bool
-	IsNote              bool
-	Tree                SceneTree
-}
-type Tree[T any] struct {
-	Id        CrdtId
-	Container map[CrdtId]T
-}
-type SceneTree struct {
-	NextItemId CrdtId
-	tree       Tree[TreeNodeInfo]
-	NodeMap    map[CrdtId]*SceneTreeNode
-}
-
-type Layer struct {
-	Name       string
-	Lines      []*LineItem
-	Highlights []*GlyphRange
-	IsVisible  bool
 }
 
 type MigrationInfo struct {
@@ -150,7 +119,12 @@ type SceneTreeNode struct {
 }
 
 func (s SceneTreeNode) String() string {
-	return fmt.Sprintf("SceneTreeNode: Id: %v Name:'%s' SeqId:%v", s.Id, s.Name.Value, s.Sequence.Id)
+	con := ""
+	if len(s.Sequence.Container) > 0 {
+		con = s.Sequence.Container[0].Item().String()
+
+	}
+	return fmt.Sprintf("SceneTreeNode: Id: %v Name:'%s' SeqId:%v %s Anchor: %v", s.Id, s.Name.Value, s.Sequence.Id, con, s.AnchorId)
 }
 
 const PenPointSize = 0x18
@@ -199,10 +173,11 @@ type TreeMoveInfo struct {
 	Id       CrdtId
 	NodeId   CrdtId
 	IsUpdate bool
-	Info     TreeItemInfo
+	//parentId inside
+	ItemInfo TreeItemInfo
 	Bob      []byte
 }
 
 func (t TreeMoveInfo) String() string {
-	return fmt.Sprintf("TreeMoveNode: Id: %v NodeId: %v, Min:%d, Cur:%d", t.Id, t.NodeId, t.Info.Value.MinVersion, t.Info.Value.CurrentVersion)
+	return fmt.Sprintf("TreeMoveNode: Id: %v NodeId: %v, Min:%d, Cur:%d Parent:%v", t.Id, t.NodeId, t.ItemInfo.Value.MinVersion, t.ItemInfo.Value.CurrentVersion, t.ItemInfo.ParentId)
 }

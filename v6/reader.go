@@ -58,6 +58,9 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 		return
 	}
 
+	var curVersion = headerInfo.CurVersion
+	var minVersion = headerInfo.MinVersion
+
 	var moveNode TreeMoveInfo
 	var sceneNode SceneTreeNode
 	switch nodeType {
@@ -68,10 +71,14 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 	case PageInfoTag:
 		s.scene.PageInfo, err = s.readPageInfo()
 	case SceneTreeTag:
-		moveNode, err = s.treeMoveNode()
+		moveNode, err = s.treeNode()
+		moveNode.ItemInfo.Value.CurrentVersion = curVersion
+		moveNode.ItemInfo.Value.MinVersion = minVersion
 		log.Debug(moveNode)
 	case SceneTreeNodeTag:
 		sceneNode, err = s.readSceneNode()
+		sceneNode.Info.CurrentVersion = curVersion
+		sceneNode.Info.CurrentVersion = minVersion
 		log.Debug(sceneNode)
 		//sceneitem
 	case GlyphItemTag, GroupItemTag, LineItemTag, 8:
@@ -82,6 +89,8 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 	case RootTextTag:
 		var node SceneTextItem
 		node, err = s.readRootText(nodeType)
+		node.CurVersion = curVersion
+		node.MinVersion = minVersion
 		log.Debug(node)
 
 	default:
@@ -101,76 +110,6 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 	return err
 }
 
-// func createSceneItem(nodeType TagType) SceneItemBase {
-// 	switch nodeType {
-// 	case LineItemTag:
-// 		return &LineItem{}
-// 	case GlyphItemTag:
-// 		return &GlyphRange{}
-// 	case TextItemTag:
-// 		return &SceneTextItem{}
-// 	case GroupItemTag:
-// 		return &GroupItem{}
-// 	}
-// 	return &SceneItem{}
-// }
-
-func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
-	length, _, err := e.ExtractUInt(0)
-	if err != nil {
-		return
-	}
-	// for {
-	textItem.Id, _, err = e.ExtractCrdtId(2)
-	if err != nil {
-		return
-	}
-	textItem.Left, _, err = e.ExtractCrdtId(3)
-	if err != nil {
-		return
-	}
-	textItem.Right, _, err = e.ExtractCrdtId(4)
-	if err != nil {
-		return
-	}
-	textItem.DeletedLength, _, err = e.ExtractInt(5)
-	if err != nil {
-		return
-	}
-
-	var found bool
-	elementLength2, found, err := e.ExtractUInt(6)
-	if err != nil {
-		return
-	}
-	log.Trace(found, length, elementLength2)
-	// if found {
-	// 	break
-	// }
-	// }
-	var strLength uint32
-	strLength, err = e.d.GetVarUInt32()
-	if err != nil {
-		return
-	}
-	_, err = e.d.ReadByte()
-	if err != nil {
-		return
-	}
-	var strBytes []byte
-	strBytes, err = e.d.GetBytes(int(strLength))
-	if err != nil {
-		return
-	}
-	textItem.Value.Text = string(strBytes)
-	log.Debug(textItem.Value.Text)
-
-	textItem.Value.Format, _, err = e.ExtractUInt(2)
-	if err != nil {
-		return
-	}
-	return
-}
 func (s *SceneReader) extractItems(seq *Sequence[*Item[TextItem]]) (err error) {
 	elementLength, err := s.e.d.GetVarUInt32()
 	if err != nil {
@@ -184,7 +123,6 @@ func (s *SceneReader) extractItems(seq *Sequence[*Item[TextItem]]) (err error) {
 			return
 		}
 		seq.Add(&item)
-
 	}
 	return
 }
@@ -265,8 +203,8 @@ func (s *SceneReader) readRootText(nodeType TagType) (sceneItem SceneTextItem, e
 
 	return
 }
-func (s *SceneReader) readSceneItem(nodeType TagType) (item Item[SceneBaseItem], id CrdtId, err error) {
-	id, _, err = s.e.ExtractCrdtId(1)
+func (s *SceneReader) readSceneItem(nodeType TagType) (item Item[SceneBaseItem], parentId CrdtId, err error) {
+	parentId, _, err = s.e.ExtractCrdtId(1)
 	if err != nil {
 		return
 	}
@@ -387,9 +325,7 @@ func (s *SceneReader) readSceneNode() (node SceneTreeNode, err error) {
 		return
 	}
 	if hasAnchor {
-		log.Trace("has anchor")
 		node.AnchorId.Value = selectedId
-
 		node.AnchorMode.Value, _, err = s.e.ExtractByte(5)
 		if err != nil {
 			return
@@ -429,20 +365,25 @@ func (s *SceneReader) readSceneNode() (node SceneTreeNode, err error) {
 	return
 }
 
-func (s *SceneReader) treeMoveNode() (node TreeMoveInfo, err error) {
+func (s *SceneReader) treeNode() (node TreeMoveInfo, err error) {
 	node.Id, _, err = s.e.ExtractCrdtId(1)
 	if err != nil {
 		return
 	}
-	node.NodeId, _, err = s.e.ExtractCrdtId(2)
+	hasNode := false
+	node.NodeId, hasNode, err = s.e.ExtractCrdtId(2)
 	if err != nil {
 		return
+	}
+	if !hasNode {
+		log.Warn("no node")
+
 	}
 	node.IsUpdate, _, err = s.e.ExtractBool(3)
 	if err != nil {
 		return
 	}
-	node.Info, _, err = s.e.ExtractInfo(4)
+	node.ItemInfo, _, err = s.e.ExtractInfo(4)
 	if err != nil {
 		return
 	}

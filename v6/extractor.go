@@ -367,10 +367,10 @@ func (e *Extractor) ExtractCrdtId(index TagIndex) (result CrdtId, found bool, er
 	return
 }
 func (e *Extractor) ExtractInfo(index TagIndex) (result TreeItemInfo, found bool, err error) {
-	if found, err = e.checkTag(index, Length4); !found {
+	nodeLength, found, err := e.ExtractUInt(index)
+	if err != nil || !found {
 		return
 	}
-	nodeLength, err := e.d.GetFixedUInt32()
 	nodeEnd := nodeLength + uint32(e.d.Pos())
 	if err != nil {
 		return
@@ -380,16 +380,10 @@ func (e *Extractor) ExtractInfo(index TagIndex) (result TreeItemInfo, found bool
 		return
 	}
 
-	if found, err = e.checkTag(2, Length4); !found {
+	_, found, err = e.ExtractUInt(2)
+	if err != nil || !found {
 		return
 	}
-	item, err := e.d.GetFixedUInt32()
-	if err != nil {
-		return
-	}
-	result.Value.CurrentVersion = byte(item >> 4)
-	result.Value.MinVersion = byte(0xFFFF0000 & item)
-
 	result.Bob, err = e.ExtractBobUntil(int(nodeEnd))
 	return
 }
@@ -606,4 +600,58 @@ func (e *Extractor) Debug() {
 		padding = strings.Repeat("  ", pos-1)
 	}
 	fmt.Printf("%s ^  pos: %d\n", padding, pos)
+}
+
+func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
+	length, _, err := e.ExtractUInt(0)
+	if err != nil {
+		return
+	}
+	// for {
+	textItem.Id, _, err = e.ExtractCrdtId(2)
+	if err != nil {
+		return
+	}
+	textItem.Left, _, err = e.ExtractCrdtId(3)
+	if err != nil {
+		return
+	}
+	textItem.Right, _, err = e.ExtractCrdtId(4)
+	if err != nil {
+		return
+	}
+	textItem.DeletedLength, _, err = e.ExtractInt(5)
+	if err != nil {
+		return
+	}
+
+	var found bool
+	elementLength2, found, err := e.ExtractUInt(6)
+	if err != nil {
+		return
+	}
+	log.Trace(found, length, elementLength2)
+
+	var strLength uint32
+	strLength, err = e.d.GetVarUInt32()
+	if err != nil {
+		return
+	}
+	_, err = e.d.ReadByte()
+	if err != nil {
+		return
+	}
+	var strBytes []byte
+	strBytes, err = e.d.GetBytes(int(strLength))
+	if err != nil {
+		return
+	}
+	textItem.Value.Text = string(strBytes)
+	log.Debug(textItem.Value.Text)
+
+	textItem.Value.Format, _, err = e.ExtractUInt(2)
+	if err != nil {
+		return
+	}
+	return
 }

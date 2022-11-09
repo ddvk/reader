@@ -82,7 +82,6 @@ func (d *BinaryDeserializer) GetFloat64() (result float64, err error) {
 	return
 }
 
-//TODO: LEB128
 func (d *BinaryDeserializer) GetVarUInt32() (result uint32, err error) {
 	val, err := binary.ReadUvarint(d)
 	if val > math.MaxUint32 {
