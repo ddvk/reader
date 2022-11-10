@@ -58,9 +58,6 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 		return
 	}
 
-	var curVersion = headerInfo.CurVersion
-	var minVersion = headerInfo.MinVersion
-
 	var moveNode TreeMoveInfo
 	var sceneNode SceneTreeNode
 	switch nodeType {
@@ -72,16 +69,14 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 		s.scene.PageInfo, err = e.ReadPageInfo()
 	case SceneTreeTag:
 		moveNode, err = e.TreeNode()
-		moveNode.ItemInfo.Value.CurrentVersion = curVersion
-		moveNode.ItemInfo.Value.MinVersion = minVersion
+		moveNode.ItemInfo.Value = headerInfo.NodeInfo
 		if err == nil {
 			s.tree.AddTree(&moveNode)
 		}
 		log.Debug(moveNode)
 	case SceneTreeNodeTag:
 		sceneNode, err = e.ReadSceneNode()
-		sceneNode.Info.CurrentVersion = curVersion
-		sceneNode.Info.CurrentVersion = minVersion
+		sceneNode.Info = header.Info.NodeInfo
 		if err == nil {
 			s.tree.AddNode(&sceneNode)
 		}
@@ -97,8 +92,7 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 	case RootTextTag:
 		var node SceneTextItem
 		node, err = e.ReadRootText(nodeType)
-		node.CurVersion = curVersion
-		node.MinVersion = minVersion
+		node.Info = headerInfo.NodeInfo
 		if err == nil {
 			s.tree.AddRootText(&node)
 		}

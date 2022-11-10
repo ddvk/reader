@@ -449,7 +449,7 @@ func (e *Extractor) ExtractPointV1() (point *PenPoint, err error) {
 	return
 }
 
-func (e *Extractor) ExtractLine(info HeaderInfo) (item *LineItem, err error) {
+func (e *Extractor) ExtractLine(info Info) (item *LineItem, err error) {
 	item = &LineItem{
 		SceneItem: SceneItem{
 			Type: LineType,
@@ -489,14 +489,14 @@ func (e *Extractor) ExtractLine(info HeaderInfo) (item *LineItem, err error) {
 
 	pointSize := PenPointSizeV2
 	extractPointFunc := e.ExtractPointV2
-	if info.CurVersion <= PointVersion1 {
+	if info.CurrentVersion <= PointVersion1 {
 		pointSize = PenPointSizeV1
 		extractPointFunc = e.ExtractPointV1
 	}
 
 	nPoints := int(length / uint32(pointSize))
 	if length%uint32(pointSize) != 0 {
-		log.Errorf("point size mismatch: version: %d", info.CurVersion)
+		log.Errorf("point size mismatch: version: %d", info.CurrentVersion)
 	}
 
 	var point *PenPoint
@@ -532,7 +532,7 @@ func (e *Extractor) ExtractSceneItem(index TagIndex, info HeaderInfo) (sceneItem
 	case GroupType:
 		sceneItem = new(GroupItem)
 	case LineType:
-		sceneItem, err = e.ExtractLine(info)
+		sceneItem, err = e.ExtractLine(info.NodeInfo)
 	case GlyphRangeType:
 		sceneItem = new(GlyphRange)
 	case TextType:

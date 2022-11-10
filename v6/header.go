@@ -12,12 +12,12 @@ type Header struct {
 }
 
 func (h Header) String() string {
-	return fmt.Sprintf("Tag: %v, length: %d, MinVer:%d, CurVer:%d", h.Info.PayloadType, h.Size, h.Info.MinVersion, h.Info.CurVersion)
+	return fmt.Sprintf("Tag: %v, length: %d, MinVer:%d, CurVer:%d", h.Info.PayloadType, h.Size, h.Info.NodeInfo.MinVersion, h.Info.NodeInfo.CurrentVersion)
 }
 
 type HeaderInfo struct {
 	PayloadType TagType
-	TreeNodeInfo
+	NodeInfo    Info
 }
 
 func ReadHeader(reader io.Reader) (h Header, err error) {
@@ -34,9 +34,9 @@ func ReadHeader(reader io.Reader) (h Header, err error) {
 
 	header := HeaderInfo{
 		PayloadType: TagType(buffer[3]),
-		TreeNodeInfo: TreeNodeInfo{
-			CurVersion: buffer[2],
-			MinVersion: buffer[1],
+		NodeInfo: Info{
+			CurrentVersion: buffer[2],
+			MinVersion:     buffer[1],
 		},
 	}
 

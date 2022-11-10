@@ -6,7 +6,7 @@ import (
 
 type SceneTree struct {
 	NextItemId CrdtId
-	tree       Tree[TreeNodeInfo]
+	tree       Tree[Info]
 
 	NodeMap map[CrdtId]*Node
 	Root    *Node
@@ -28,10 +28,6 @@ type Tree[T any] struct {
 	Id      CrdtId
 	NodeMap map[CrdtId]T
 }
-type TreeNodeInfo struct {
-	CurVersion byte
-	MinVersion byte
-}
 
 const rootId = CrdtId(1)
 
@@ -42,8 +38,8 @@ func NewTree() (tree *SceneTree) {
 	}
 	return &SceneTree{
 		NodeMap: map[CrdtId]*Node{rootId: rootNode},
-		tree: Tree[TreeNodeInfo]{
-			NodeMap: make(map[CrdtId]TreeNodeInfo),
+		tree: Tree[Info]{
+			NodeMap: make(map[CrdtId]Info),
 		},
 		Root: rootNode,
 	}

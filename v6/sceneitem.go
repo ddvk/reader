@@ -10,13 +10,12 @@ type SceneBaseItem interface {
 }
 
 type SceneItem struct {
-	Id         CrdtId
-	ParentId   CrdtId
-	Type       SceneType
-	CurVersion byte //=2
-	MinVersion byte
-	IsDirty    bool
-	Bob        []byte
+	Id       CrdtId
+	ParentId CrdtId
+	Type     SceneType
+	Info     Info
+	IsDirty  bool
+	Bob      []byte
 }
 
 func (t SceneItem) String() string {
