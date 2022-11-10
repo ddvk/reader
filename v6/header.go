@@ -35,8 +35,8 @@ func ReadHeader(reader io.Reader) (h Header, err error) {
 	header := HeaderInfo{
 		PayloadType: TagType(buffer[3]),
 		TreeNodeInfo: TreeNodeInfo{
-			MinVersion: buffer[2],
-			CurVersion: buffer[1],
+			CurVersion: buffer[2],
+			MinVersion: buffer[1],
 		},
 	}
 

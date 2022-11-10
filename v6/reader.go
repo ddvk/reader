@@ -86,11 +86,10 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 			s.tree.AddNode(&sceneNode)
 		}
 		log.Debug(sceneNode)
-		//sceneitem
 	case GlyphItemTag, GroupItemTag, LineItemTag, 8:
 		var item Item[SceneBaseItem]
 		var parentId CrdtId
-		item, parentId, err = e.ReadSceneItem(nodeType)
+		item, parentId, err = e.ReadSceneItem(header)
 		if err == nil {
 			s.tree.AddItem(item, parentId)
 		}
@@ -110,9 +109,9 @@ func (s *SceneReader) parsePayload(header Header, reader io.Reader) (err error) 
 	}
 
 	if err != nil {
+		e.DumpBuffer()
 		return
 	}
-	e.Debug()
 
 	n, err := e.Discard()
 	if n > 0 {

@@ -123,13 +123,17 @@ func (s SceneTreeNode) String() string {
 	return fmt.Sprintf("SceneTreeNode: Id: %v Name:'%s' SeqId:%v %s Anchor: %v", s.Id, s.Name.Value, s.Sequence.Id, con, s.AnchorId)
 }
 
-const PenPointSize = 0x18
+const PointVersion1 = 1
+const PointVersion2 = 2
+
+const PenPointSizeV1 = 0x18
+const PenPointSizeV2 = 0xE
 
 type PenPoint struct {
 	X         float32
 	Y         float32
-	Speed     int16
-	Width     int16
+	Speed     uint16
+	Width     uint16
 	Direction byte
 	Pressure  byte
 }

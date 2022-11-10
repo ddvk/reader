@@ -37,11 +37,6 @@ type Extractor struct {
 	buffer  []byte
 }
 
-// func NewExtractor(d *BinaryDeserializer) *Extractor {
-// 	return &Extractor{
-// 		d: d,
-// 	}
-// }
 func NewDebugExtractor(reader io.Reader, max int) (extractor *Extractor, err error) {
 	buffer := make([]byte, max)
 	_, err = io.ReadFull(reader, buffer)
@@ -71,27 +66,6 @@ func (e *Extractor) Discard() (n int64, err error) {
 	return io.Copy(io.Discard, e.d)
 }
 
-// func ExtractLwwAny[T any](decoder *ChunkDecoder, index TagIndex) (result Lww[T], found bool, err error) {
-// 	if found, err = decoder.checkTag(index, ItemTag); !found {
-// 		return
-// 	}
-// 	_, err = decoder.GetUInt32()
-// 	if err != nil {
-// 		return
-// 	}
-// 	timestamp, _, err := decoder.ExtractCrdtId(1)
-// 	if err != nil {
-// 		return
-// 	}
-// 	val, _, err := decoder.ExtractByte(2)
-// 	if err != nil {
-// 		return
-// 	}
-// 	result.Value = val
-// 	result.Timestamp = timestamp
-// 	return
-// 	binary.Read(nil, binary.LittleEndian, result.Value)
-// }
 func (decoder *Extractor) ExtractLwwByte(control TagIndex) (result Lww[byte], found bool, err error) {
 	if found, err = decoder.checkTag(control, Length4); !found {
 		return
@@ -265,9 +239,7 @@ func (decoder *Extractor) ExtractLwwString(index TagIndex) (result Lww[string], 
 	if err != nil {
 		return
 	}
-	// if strLen == 0 {
-	// 	return
-	// }
+
 	log.Trace("got isascii %d ", isAscii)
 	strBytes, err := decoder.d.GetBytes(int(stringLength))
 	if err != nil {
@@ -332,6 +304,7 @@ func (e *Extractor) ExtractByte(index TagIndex) (result byte, found bool, err er
 	result, err = e.d.ReadByte()
 	return
 }
+
 func (e *Extractor) ExtractFloat(index TagIndex) (result float32, found bool, err error) {
 	if found, err = e.checkTag(index, Byte4); !found {
 		return
@@ -339,6 +312,7 @@ func (e *Extractor) ExtractFloat(index TagIndex) (result float32, found bool, er
 	err = binary.Read(e.d, binary.LittleEndian, &result)
 	return
 }
+
 func (e *Extractor) ExtractCrdtId(index TagIndex) (result CrdtId, found bool, err error) {
 	if found, err = e.checkTag(index, CrdtTag); !found {
 		return
@@ -410,7 +384,33 @@ func (e *Extractor) ExtractBobUntil(max int) (bob []byte, err error) {
 	}
 	return
 }
-func (e *Extractor) ExtractPoint() (point *PenPoint, err error) {
+func (e *Extractor) ExtractPointV2() (point *PenPoint, err error) {
+	point = &PenPoint{}
+
+	point.X, err = e.d.GetFloat32()
+	if err != nil {
+		return
+	}
+	point.Y, err = e.d.GetFloat32()
+	if err != nil {
+		return
+	}
+	point.Speed, err = e.d.GetShort()
+	if err != nil {
+		return
+	}
+	point.Width, err = e.d.GetShort()
+	if err != nil {
+		return
+	}
+	point.Direction, err = e.d.ReadByte()
+	if err != nil {
+		return
+	}
+	point.Pressure, err = e.d.ReadByte()
+	return
+}
+func (e *Extractor) ExtractPointV1() (point *PenPoint, err error) {
 	point = &PenPoint{}
 
 	point.X, err = e.d.GetFloat32()
@@ -426,7 +426,7 @@ func (e *Extractor) ExtractPoint() (point *PenPoint, err error) {
 	if err != nil {
 		return
 	}
-	point.Speed = int16(math.Round(float64(tmp) * 4))
+	point.Speed = uint16(math.Round(float64(tmp) * 4))
 
 	tmp, err = e.d.GetFloat32()
 	if err != nil {
@@ -438,7 +438,7 @@ func (e *Extractor) ExtractPoint() (point *PenPoint, err error) {
 	if err != nil {
 		return
 	}
-	point.Width = int16(math.Round(float64(tmp) * 4))
+	point.Width = uint16(math.Round(float64(tmp) * 4))
 
 	tmp, err = e.d.GetFloat32()
 	if err != nil {
@@ -449,7 +449,7 @@ func (e *Extractor) ExtractPoint() (point *PenPoint, err error) {
 	return
 }
 
-func (e *Extractor) ExtractLine() (item *LineItem, err error) {
+func (e *Extractor) ExtractLine(info HeaderInfo) (item *LineItem, err error) {
 	item = &LineItem{
 		SceneItem: SceneItem{
 			Type: LineType,
@@ -487,18 +487,24 @@ func (e *Extractor) ExtractLine() (item *LineItem, err error) {
 		return
 	}
 
-	nPoints := int(length / PenPointSize)
-	if length%PenPointSize != 0 {
-		log.Error("point size mismatch")
+	pointSize := PenPointSizeV2
+	extractPointFunc := e.ExtractPointV2
+	if info.CurVersion <= PointVersion1 {
+		pointSize = PenPointSizeV1
+		extractPointFunc = e.ExtractPointV1
+	}
+
+	nPoints := int(length / uint32(pointSize))
+	if length%uint32(pointSize) != 0 {
+		log.Errorf("point size mismatch: version: %d", info.CurVersion)
 	}
 
 	var point *PenPoint
 	for i := 0; i < nPoints; i++ {
-		point, err = e.ExtractPoint()
+		point, err = extractPointFunc()
 		if err != nil {
 			return
 		}
-
 		log.Trace(point)
 		line.AddPoint(point)
 	}
@@ -506,13 +512,13 @@ func (e *Extractor) ExtractLine() (item *LineItem, err error) {
 
 	return
 }
-func (e *Extractor) ExtractSceneItem(index TagIndex) (sceneItem SceneBaseItem, err error) {
+func (e *Extractor) ExtractSceneItem(index TagIndex, info HeaderInfo) (sceneItem SceneBaseItem, err error) {
 	length, found, err := e.ExtractUInt(index)
 	if err != nil || !found {
 		return
 	}
 	elementEnd := int(length) + e.d.Pos()
-	log.Infof("sceneItem length: %d", length)
+	log.Infof("sceneItem length: %d(%x)", length, length)
 	if err != nil {
 		return
 	}
@@ -526,7 +532,7 @@ func (e *Extractor) ExtractSceneItem(index TagIndex) (sceneItem SceneBaseItem, e
 	case GroupType:
 		sceneItem = new(GroupItem)
 	case LineType:
-		sceneItem, err = e.ExtractLine()
+		sceneItem, err = e.ExtractLine(info)
 	case GlyphRangeType:
 		sceneItem = new(GlyphRange)
 	case TextType:
@@ -592,7 +598,7 @@ func (e *Extractor) ExtractUUIDPair() (u uuid.UUID, index AuthorId, err error) {
 	return
 
 }
-func (e *Extractor) Debug() {
+func (e *Extractor) DumpBuffer() {
 	pos := e.d.position
 	fmt.Println(strings.ToUpper(hex.EncodeToString(e.buffer)))
 	padding := ""
@@ -749,7 +755,7 @@ func (e *Extractor) ReadRootText(nodeType TagType) (sceneItem SceneTextItem, err
 
 	return
 }
-func (e *Extractor) ReadSceneItem(nodeType TagType) (item Item[SceneBaseItem], parentId CrdtId, err error) {
+func (e *Extractor) ReadSceneItem(header Header) (item Item[SceneBaseItem], parentId CrdtId, err error) {
 	parentId, _, err = e.ExtractCrdtId(1)
 	if err != nil {
 		return
@@ -770,7 +776,7 @@ func (e *Extractor) ReadSceneItem(nodeType TagType) (item Item[SceneBaseItem], p
 	if err != nil {
 		return
 	}
-	item.Value, err = e.ExtractSceneItem(6)
+	item.Value, err = e.ExtractSceneItem(6, header.Info)
 	if err != nil {
 		return
 	}

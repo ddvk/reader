@@ -33,16 +33,19 @@ type TreeNodeInfo struct {
 	MinVersion byte
 }
 
+const rootId = CrdtId(1)
+
 func NewTree() (tree *SceneTree) {
 
+	rootNode := &Node{
+		Id: rootId,
+	}
 	return &SceneTree{
-		NodeMap: make(map[CrdtId]*Node),
+		NodeMap: map[CrdtId]*Node{rootId: rootNode},
 		tree: Tree[TreeNodeInfo]{
 			NodeMap: make(map[CrdtId]TreeNodeInfo),
 		},
-		Root: &Node{
-			Id: 1,
-		},
+		Root: rootNode,
 	}
 }
 
@@ -57,16 +60,18 @@ func NewNodeM(s *TreeMoveInfo) *Node {
 	}
 }
 func (t *SceneTree) AddTree(mi *TreeMoveInfo) {
-	parentId := mi.ItemInfo.ParentId
-	parent, ok := t.NodeMap[parentId]
 	n := NewNodeM(mi)
 	t.NodeMap[mi.Id] = n
-	if !ok {
-		t.Root.Add(n)
+	parentId := mi.ItemInfo.ParentId
+	if parentId == rootId {
 		n.IsLayer = true
-		//not found
+	}
+	parent, ok := t.NodeMap[parentId]
+	if !ok {
+		logrus.Warn("Parent not found!")
 	} else {
 		parent.Add(n)
+
 	}
 }
 func (t *SceneTree) AddNode(mi *SceneTreeNode) {
