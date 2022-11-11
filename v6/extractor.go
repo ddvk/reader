@@ -157,7 +157,7 @@ type tagInfo struct {
 	TagId    ElementTag
 }
 
-//TODO: hack
+// TODO: hack
 const ignoreTagIndex = -1
 
 // checkTag reads a tag or a pending tag and advances if the index does not match
@@ -367,21 +367,24 @@ func (e *Extractor) ExtractBob() (bob []byte, err error) {
 }
 
 func (e *Extractor) ExtractBobUntil(max int) (bob []byte, err error) {
+	pos := e.d.position
+	bobLength := max - pos
+	if bobLength <= 0 {
+		return nil, nil
+	}
 	if e.lastTag != nil {
 		log.Error("pending last tag, fix this")
 		err = errors.New("pending last tag")
 		return
 
 	}
-	pos := e.d.position
-	bobLength := max - pos
-	if bobLength > 0 {
-		log.Warnf("Extracting bob with length:%d (%d,%d)", bobLength, pos, max)
-		bob, err = e.d.GetBytes(bobLength)
-		if err != nil {
-			return
-		}
+
+	log.Warnf("Extracting bob with length:%d (%d,%d)", bobLength, pos, max)
+	bob, err = e.d.GetBytes(bobLength)
+	if err != nil {
+		return
 	}
+
 	return
 }
 func (e *Extractor) ExtractPointV2() (point *PenPoint, err error) {
@@ -613,6 +616,7 @@ func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
 	if err != nil {
 		return
 	}
+	endPosition := length + uint32(e.d.Pos())
 	// for {
 	textItem.Id, _, err = e.ExtractCrdtId(2)
 	if err != nil {
@@ -636,6 +640,10 @@ func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
 	if err != nil {
 		return
 	}
+	if !found {
+		return
+
+	}
 	log.Trace(found, length, elementLength2)
 
 	var strLength uint32
@@ -656,6 +664,10 @@ func (e *Extractor) ExtractTextItem() (textItem Item[TextItem], err error) {
 	log.Debug(textItem.Value.Text)
 
 	textItem.Value.Format, _, err = e.ExtractUInt(2)
+	if err != nil {
+		return
+	}
+	textItem.Bob, err = e.ExtractBobUntil(int(endPosition))
 	if err != nil {
 		return
 	}

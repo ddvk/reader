@@ -64,7 +64,7 @@ func (t *SceneTree) AddTree(mi *TreeMoveInfo) {
 	}
 	parent, ok := t.NodeMap[parentId]
 	if !ok {
-		logrus.Warn("Parent not found!")
+		logrus.Warn("Parent not found! ", parentId)
 	} else {
 		parent.Add(n)
 
