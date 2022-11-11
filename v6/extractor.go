@@ -171,7 +171,7 @@ func (e *Extractor) checkTag(expectedIndex TagIndex, tag ElementTag) (bool, erro
 
 		lastTag := e.lastTag.TagId
 		if lastTag != tag {
-			log.Errorf("lastTag != current,index:%d, have: %x, wants: %x", expectedIndex, lastTag, tag)
+			log.Errorf("lastTag != current, current index: %d, has: %x, wants tag: %x", expectedIndex, lastTag, tag)
 			return false, ErrTagMismatch
 		}
 
@@ -181,8 +181,7 @@ func (e *Extractor) checkTag(expectedIndex TagIndex, tag ElementTag) (bool, erro
 	}
 	id, err := e.d.GetVarUInt32()
 	if err == io.EOF {
-		//TODO: no more tags in the stream
-		//logrus.Warn("EOF reading tag: ", tag)
+		//no more tags in the stream
 		return false, nil
 	}
 	log.Trace("consumingTag: %x at pos: %x", id, e.d.Pos())
