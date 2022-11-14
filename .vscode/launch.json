@@ -8,10 +8,9 @@
             "name": "Launch Package",
             "type": "go",
             "request": "launch",
-            "args": ["C:/Users/ddd/AppData/Roaming/remarkable/desktop/3ba4f0da-fd96-4ef4-ad04-7e136585c006/0f430107-8455-40cb-a3b8-16ca931c997e.rm"],
-            // "args": ["C:/Users/ddd/AppData/Roaming/remarkable/desktop/3ba4f0da-fd96-4ef4-ad04-7e136585c006/2e8627f2-c121-4176-a4a6-f6db2992e371.rm"],
+            "args": ["../notefiles/v6_text.rm"],
             "mode": "auto",
-            "program": "${workspaceFolder}\\."
+            "program": "${workspaceFolder}/cmd"
         }
     ]
 }

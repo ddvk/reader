@@ -2,9 +2,9 @@ package main
 
 import (
 	"io"
-	v6 "myreader/v6"
 	"os"
 
+	v6 "github.com/ddvk/reader/v6"
 	log "github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )

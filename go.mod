@@ -1,4 +1,4 @@
-module myreader
+module github.com/ddvk/reader
 
 go 1.18
 
