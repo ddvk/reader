@@ -5,12 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Package",
+            "name": "V6",
             "type": "go",
             "request": "launch",
-            "args": ["../notefiles/v6_text.rm"],
+            "args": ["./notebooks/migration_v6.rm"],
             "mode": "auto",
-            "program": "${workspaceFolder}/cmd"
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/cmd/readerv6"
+        },
+         {
+            "name": "V5",
+            "type": "go",
+            "request": "launch",
+            "args": ["./notebooks/migration_v5.rm"],
+            "mode": "auto",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/cmd/readerv5"
         }
     ]
 }

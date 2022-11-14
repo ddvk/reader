@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -24,12 +25,14 @@ func parseSceneFile(file io.ReadSeekCloser) (err error) {
 		return
 	}
 	log.Info("parsed: ", scene)
-	for _, la := range scene.Layers {
-		log.Infof("\t %v", la)
-		for _, li := range la.Lines {
-			log.Infof("\t\t %v", li)
-			for _, po := range li.Line.Value.Points {
-				log.Infof("\t\t\t %v", po)
+
+	fmt.Printf("Number of Layer: %d\n", len(scene.Layers))
+	for i, layer := range scene.Layers {
+		fmt.Printf("Layer: %d num lines:%d\n", i, len(layer.Lines))
+		for j, line := range layer.Lines {
+			fmt.Printf("\tLine: %d points: %d\n", j, len(line.Line.Value.Points))
+			for _, point := range line.Line.Value.Points {
+				fmt.Printf("\t\t\tX: %f Y: %f speed: %d width: %d\n", point.X, point.Y, point.Speed, point.Width)
 			}
 		}
 	}
